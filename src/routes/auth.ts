@@ -117,10 +117,11 @@ router.post("/register", async (req: Request, res: Response) => {
     const newUser = userResult.rows[0];
 
     // Create negocio
+    const negocioId = uuidv4();
     await query(
-      `INSERT INTO negocios (user_id, nombre, slug, phone, referral_source, whatsapp)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [newUser.id, nombreNegocio, slug, phone, referralSource || null, whatsapp || null]
+      `INSERT INTO negocios (id, user_id, nombre, slug, phone, referral_source, whatsapp)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [negocioId, newUser.id, nombreNegocio, slug, phone, referralSource || null, whatsapp || null]
     );
 
     const token = generateToken({ userId: newUser.id, email: newUser.email });
