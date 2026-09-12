@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+.env.*
+test-suite.sh
+*.log
+.git
+.gitignore

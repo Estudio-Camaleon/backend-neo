@@ -1,0 +1,23 @@
+# dependencies
+/node_modules
+
+# env files
+.env
+
+# build
+/dist
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+
+# Editor
+*.swp
+*.swo
+
+# Cache
+.eslintcache
+tsconfig.tsbuildinfo
