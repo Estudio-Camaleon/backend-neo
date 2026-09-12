@@ -2,7 +2,6 @@ import { query } from "./db";
 
 const memoryStore = new Map<string, { count: number; expiresAt: number }>();
 
-// Periodic cleanup every 5 minutes instead of per-request
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 let lastCleanup = Date.now();
 
@@ -12,12 +11,11 @@ async function cleanupExpiredEntries() {
   lastCleanup = now;
 
   try {
-    await query("DELETE FROM rate_limits WHERE expires_at < $1", [new Date(now).toISOString()]);
+    await query("DELETE FROM rate_limits WHERE expires_at < NOW()");
   } catch {
     // cleanup failure is non-critical
   }
 
-  // Also clean in-memory fallback
   for (const [key, entry] of memoryStore) {
     if (entry.expiresAt < now) memoryStore.delete(key);
   }
@@ -33,16 +31,16 @@ export async function checkRateLimit(
   try {
     await cleanupExpiredEntries();
 
-    const expiresAt = new Date(now + windowMs).toISOString();
+    const expiresAt = new Date(now + windowMs).toISOString().slice(0, 19).replace("T", " ");
 
     const { rows: existing } = await query(
-      "SELECT count FROM rate_limits WHERE key = $1 AND expires_at >= $2 LIMIT 1",
-      [key, new Date(now).toISOString()]
+      "SELECT `count` FROM rate_limits WHERE `key` = ? AND expires_at >= NOW() LIMIT 1",
+      [key]
     );
 
     if (!existing[0]) {
       await query(
-        "INSERT INTO rate_limits (key, count, expires_at) VALUES ($1, 1, $2)",
+        "INSERT INTO rate_limits (id, `key`, `count`, expires_at) VALUES (UUID(), ?, 1, ?)",
         [key, expiresAt]
       );
       return true;
@@ -53,13 +51,12 @@ export async function checkRateLimit(
     }
 
     await query(
-      "UPDATE rate_limits SET count = count + 1 WHERE key = $1",
+      "UPDATE rate_limits SET `count` = `count` + 1 WHERE `key` = ?",
       [key]
     );
 
     return true;
   } catch {
-    // In-memory fallback (per-process, best-effort)
     const entry = memoryStore.get(key);
     if (!entry || entry.expiresAt < now) {
       memoryStore.set(key, { count: 1, expiresAt: now + windowMs });

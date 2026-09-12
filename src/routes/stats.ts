@@ -13,12 +13,12 @@ router.get("/dashboard", async (req: Request, res: Response) => {
 
     const [pedidosRes, clientesRes, productosRes, categoriasRes] = await Promise.all([
       query(
-        "SELECT id, estado, total, cliente_nombre, created_at, es_delivery FROM pedidos WHERE negocio_id = $1 AND created_at >= $2 ORDER BY created_at DESC",
+        "SELECT id, estado, total, cliente_nombre, created_at, es_delivery FROM pedidos WHERE negocio_id = ? AND created_at >= ? ORDER BY created_at DESC",
         [req.negocioId, todayStart.toISOString()]
       ),
-      query("SELECT COUNT(*) as count FROM clientes WHERE negocio_id = $1", [req.negocioId]),
-      query("SELECT COUNT(*) as count FROM productos WHERE negocio_id = $1", [req.negocioId]),
-      query("SELECT COUNT(*) as count FROM categorias WHERE negocio_id = $1", [req.negocioId]),
+      query("SELECT COUNT(*) as count FROM clientes WHERE negocio_id = ?", [req.negocioId]),
+      query("SELECT COUNT(*) as count FROM productos WHERE negocio_id = ?", [req.negocioId]),
+      query("SELECT COUNT(*) as count FROM categorias WHERE negocio_id = ?", [req.negocioId]),
     ]);
 
     const pedidos = pedidosRes.rows;
@@ -55,7 +55,7 @@ router.get("/summary", async (req: Request, res: Response) => {
 
     const { rows: orders } = await query(
       `SELECT id, total, estado, metodo_pago, created_at, es_delivery, cliente_nombre
-       FROM pedidos WHERE negocio_id = $1 AND created_at >= $2 AND created_at <= $3
+       FROM pedidos WHERE negocio_id = ? AND created_at >= ? AND created_at <= ?
        ORDER BY created_at DESC LIMIT 5000`,
       [req.negocioId, startDate, endDate]
     );

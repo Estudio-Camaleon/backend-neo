@@ -11,7 +11,6 @@ const MP_WEBHOOK_SECRET = process.env.MERCADO_PAGO_WEBHOOK_SECRET;
 
 function getMPClient() {
   if (!MP_ACCESS_TOKEN) return null;
-  // Dynamic import to avoid errors if mercadopago is not installed
   try {
     const { MercadoPagoConfig, PreApproval } = require("mercadopago");
     const client = new MercadoPagoConfig({ accessToken: MP_ACCESS_TOKEN });
@@ -21,7 +20,6 @@ function getMPClient() {
   }
 }
 
-// Create preapproval (requires auth)
 router.post("/create-preapproval", requireAuth, resolveTenant, async (req: Request, res: Response) => {
   const mp = getMPClient();
   if (!mp) {
@@ -30,7 +28,7 @@ router.post("/create-preapproval", requireAuth, resolveTenant, async (req: Reque
 
   try {
     const { rows: negocios } = await query(
-      "SELECT id, mp_customer_id FROM negocios WHERE id = $1",
+      "SELECT id, mp_customer_id FROM negocios WHERE id = ?",
       [req.negocioId]
     );
 
@@ -61,7 +59,7 @@ router.post("/create-preapproval", requireAuth, resolveTenant, async (req: Reque
     }
 
     await query(
-      "UPDATE negocios SET mp_subscription_id = $1, mp_status = 'pending', subscription_status = 'pending' WHERE id = $2",
+      "UPDATE negocios SET mp_subscription_id = ?, mp_status = 'pending', subscription_status = 'pending' WHERE id = ?",
       [result.id, negocio.id]
     );
 
@@ -72,7 +70,6 @@ router.post("/create-preapproval", requireAuth, resolveTenant, async (req: Reque
   }
 });
 
-// Webhook (no auth - verified by signature)
 router.post("/webhook", async (req: Request, res: Response) => {
   try {
     const bodyText = JSON.stringify(req.body);
@@ -131,14 +128,15 @@ async function handlePreApprovalNotification(preapprovalId: string) {
 
     await query(
       `UPDATE negocios SET
-        mp_subscription_id = $1, mp_status = $2, subscription_status = $3,
-        plan_tier = $4, mp_customer_id = $5,
-        current_period_ends_at = $6
-       WHERE mp_subscription_id = $1`,
+        mp_subscription_id = ?, mp_status = ?, subscription_status = ?,
+        plan_tier = ?, mp_customer_id = ?,
+        current_period_ends_at = ?
+       WHERE mp_subscription_id = ?`,
       [
         preapprovalId, mpStatus, subscriptionStatus, planTier,
         sub.payer_id?.toString() || null,
         mpStatus === "authorized" ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : null,
+        preapprovalId,
       ]
     );
   } catch (err) {

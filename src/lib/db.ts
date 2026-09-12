@@ -1,25 +1,40 @@
-import { Pool } from "pg";
+import mysql from "mysql2/promise";
 
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
-});
+const config = {
+  uri: process.env.DATABASE_URL || "mysql://neo:neo_secret@db:3306/neo",
+  waitForConnections: true,
+  connectionLimit: 20,
+  queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
+};
 
-pool.on("error", (err) => {
-  console.error("[DB] Unexpected error on idle client:", err);
+export const pool = mysql.createPool(config);
+
+pool.on("connection", () => {
+  console.log("[DB] New connection established");
 });
 
 export async function query<T = any>(
-  text: string,
+  sql: string,
   params?: any[]
-): Promise<{ rows: T[]; rowCount: number | null }> {
+): Promise<{ rows: T[]; rowCount: number; insertId?: number; affectedRows?: number }> {
   const start = Date.now();
-  const result = await pool.query(text, params);
+  const [rows] = await pool.execute(sql, params);
   const duration = Date.now() - start;
   if (duration > 500) {
-    console.warn(`[DB] Slow query (${duration}ms):`, text.slice(0, 100));
+    console.warn(`[DB] Slow query (${duration}ms):`, sql.slice(0, 100));
   }
-  return { rows: result.rows, rowCount: result.rowCount };
+
+  const result = rows as any;
+  if (Array.isArray(result)) {
+    return { rows: result as T[], rowCount: result.length };
+  }
+
+  return {
+    rows: [],
+    rowCount: result.affectedRows || 0,
+    insertId: result.insertId,
+    affectedRows: result.affectedRows,
+  };
 }

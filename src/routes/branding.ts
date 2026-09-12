@@ -8,7 +8,7 @@ router.use(requireAuth);
 router.get("/", async (req: Request, res: Response) => {
   try {
     const { rows: negocios } = await query(
-      "SELECT * FROM negocios WHERE user_id = $1 LIMIT 1",
+      "SELECT * FROM negocios WHERE user_id = ? LIMIT 1",
       [req.user!.userId]
     );
     if (!negocios[0]) return res.status(404).json({ error: "Negocio no encontrado" });
@@ -32,7 +32,7 @@ router.put("/", async (req: Request, res: Response) => {
 
     // Verify ownership
     const { rows: current } = await query(
-      "SELECT id, logo_url, banner_url FROM negocios WHERE id = $1 AND user_id = $2",
+      "SELECT id, logo_url, banner_url FROM negocios WHERE id = ? AND user_id = ?",
       [id, req.user!.userId]
     );
     if (!current[0]) return res.status(403).json({ error: "Acceso denegado" });
@@ -52,25 +52,24 @@ router.put("/", async (req: Request, res: Response) => {
 
     // Check slug uniqueness
     const slugCheck = await query(
-      "SELECT id FROM negocios WHERE slug = $1 AND id != $2",
+      "SELECT id FROM negocios WHERE slug = ? AND id != ?",
       [cleanSlug, id]
     );
     if (slugCheck.rows[0]) {
       return res.status(409).json({ error: "El slug ya está en uso por otra marca." });
     }
 
-    const { rows } = await query(
+    const result = await query(
       `UPDATE negocios SET
-        nombre = $1, slug = $2, whatsapp = $3, descripcion = $4, direccion = $5,
-        localidad = $6, direccion_notas = $7, color_primary = $8, logo_url = $9,
-        logo_scale = $10, logo_posicion = $11, logo_fit = $12, logo_shape = $13,
-        banner_url = $14, banner_posicion = $15, banner_height = $16, banner_scale = $17,
-        mostrar_nombre = $18, instagram_url = $19, facebook_url = $20, tiktok_url = $21,
-        twitter_url = $22, youtube_url = $23, horarios = $24, direcciones = $25,
-        whatsapp_mensajes = $26, tipo_envio = $27, costo_envio = $28, pedido_minimo = $29,
-        moneda_simbolo = $30, updated_at = now()
-       WHERE id = $31 AND user_id = $32
-       RETURNING *`,
+        nombre = ?, slug = ?, whatsapp = ?, descripcion = ?, direccion = ?,
+        localidad = ?, direccion_notas = ?, color_primary = ?, logo_url = ?,
+        logo_scale = ?, logo_posicion = ?, logo_fit = ?, logo_shape = ?,
+        banner_url = ?, banner_posicion = ?, banner_height = ?, banner_scale = ?,
+        mostrar_nombre = ?, instagram_url = ?, facebook_url = ?, tiktok_url = ?,
+        twitter_url = ?, youtube_url = ?, horarios = ?, direcciones = ?,
+        whatsapp_mensajes = ?, tipo_envio = ?, costo_envio = ?, pedido_minimo = ?,
+        moneda_simbolo = ?, updated_at = NOW()
+       WHERE id = ? AND user_id = ?`,
       [
         nombre?.trim(), cleanSlug, whatsapp?.trim(), descripcion?.trim(),
         direccion?.trim(), localidad?.trim(), direccion_notas?.trim(), color_primary,
@@ -88,8 +87,13 @@ router.put("/", async (req: Request, res: Response) => {
       ]
     );
 
-    if (!rows[0]) return res.status(500).json({ error: "Error al actualizar" });
-    return res.json({ success: true, slug: cleanSlug, negocio: rows[0] });
+    if (result.affectedRows === 0) return res.status(500).json({ error: "Error al actualizar" });
+
+    const { rows: updatedNegocio } = await query(
+      "SELECT * FROM negocios WHERE id = ? AND user_id = ?",
+      [id, req.user!.userId]
+    );
+    return res.json({ success: true, slug: cleanSlug, negocio: updatedNegocio[0] });
   } catch (err) {
     console.error("[BRANDING] Error:", err);
     return res.status(500).json({ error: "Error al actualizar branding" });
@@ -103,18 +107,18 @@ router.delete("/", async (req: Request, res: Response) => {
     if (!id) return res.status(400).json({ error: "ID requerido" });
 
     const { rows: current } = await query(
-      "SELECT id, slug FROM negocios WHERE id = $1 AND user_id = $2",
+      "SELECT id, slug FROM negocios WHERE id = ? AND user_id = ?",
       [id, req.user!.userId]
     );
     if (!current[0]) return res.status(403).json({ error: "Acceso denegado" });
 
     // Save deletion reason
     if (reason) {
-      await query("UPDATE negocios SET deletion_reason = $1 WHERE id = $2 AND user_id = $3", [reason, id, req.user!.userId]);
+      await query("UPDATE negocios SET deletion_reason = ? WHERE id = ? AND user_id = ?", [reason, id, req.user!.userId]);
     }
 
     // Use atomic deletion function
-    await query("SELECT eliminar_negocio_completo($1)", [id]);
+    await query("CALL eliminar_negocio_completo(?)", [id]);
 
     return res.json({ success: true });
   } catch (err) {

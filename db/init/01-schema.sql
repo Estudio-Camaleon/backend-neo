@@ -1,66 +1,51 @@
 -- NEO Database Schema
--- Migrated from Supabase to vanilla PostgreSQL
+-- MySQL 8.0
 
--- Extensions
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- ═══════════════════════════════════════════════════════════
--- ENUMS
--- ═══════════════════════════════════════════════════════════
-
-DO $$ BEGIN
-  CREATE TYPE estado_pedido AS ENUM ('pendiente', 'en_preparacion', 'entregado', 'cancelado');
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-
-DO $$ BEGIN
-  CREATE TYPE team_role AS ENUM ('admin', 'staff', 'viewer');
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
+SET NAMES utf8mb4;
+SET CHARACTER SET utf8mb4;
 
 -- ═══════════════════════════════════════════════════════════
 -- TABLES
 -- ═══════════════════════════════════════════════════════════
 
--- Users (replaces Supabase Auth)
+-- Users
 CREATE TABLE IF NOT EXISTS users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  first_name TEXT,
-  last_name TEXT,
-  phone TEXT,
+  id CHAR(36) PRIMARY KEY,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  first_name VARCHAR(255),
+  last_name VARCHAR(255),
+  phone VARCHAR(50),
   email_confirmed BOOLEAN DEFAULT false,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Negocios (tenants)
 CREATE TABLE IF NOT EXISTS negocios (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-  nombre TEXT NOT NULL,
-  slug TEXT UNIQUE NOT NULL,
-  phone TEXT,
+  id CHAR(36) PRIMARY KEY,
+  user_id CHAR(36),
+  nombre VARCHAR(255) NOT NULL,
+  slug VARCHAR(255) UNIQUE NOT NULL,
+  phone VARCHAR(50),
   descripcion TEXT,
   direccion TEXT,
-  localidad TEXT,
+  localidad VARCHAR(255),
   direccion_notas TEXT,
-  direcciones JSONB DEFAULT '[]'::jsonb,
-  horarios JSONB,
-  whatsapp TEXT,
-  whatsapp_mensajes JSONB,
-  color_primary TEXT,
+  direcciones JSON,
+  horarios JSON,
+  whatsapp VARCHAR(50),
+  whatsapp_mensajes JSON,
+  color_primary VARCHAR(50),
   logo_url TEXT,
-  logo_scale NUMERIC(5,2) DEFAULT 1,
-  logo_posicion TEXT DEFAULT 'centro',
-  logo_fit TEXT DEFAULT 'cover',
-  logo_shape TEXT DEFAULT 'rectangulo',
+  logo_scale DECIMAL(5,2) DEFAULT 1,
+  logo_posicion VARCHAR(50) DEFAULT 'centro',
+  logo_fit VARCHAR(50) DEFAULT 'cover',
+  logo_shape VARCHAR(50) DEFAULT 'rectangulo',
   banner_url TEXT,
-  banner_posicion TEXT DEFAULT 'centro',
-  banner_height TEXT DEFAULT '200px',
-  banner_scale NUMERIC(5,2) DEFAULT 1,
+  banner_posicion VARCHAR(50) DEFAULT 'centro',
+  banner_height VARCHAR(20) DEFAULT '200px',
+  banner_scale DECIMAL(5,2) DEFAULT 1,
   mostrar_nombre BOOLEAN DEFAULT true,
   instagram_url TEXT,
   facebook_url TEXT,
@@ -68,307 +53,325 @@ CREATE TABLE IF NOT EXISTS negocios (
   twitter_url TEXT,
   youtube_url TEXT,
   tripadvisor_url TEXT,
-  redes_principales JSONB,
-  floating_shapes JSONB,
-  tipo_envio TEXT DEFAULT 'delivery',
-  moneda_simbolo TEXT DEFAULT '$',
-  pedido_minimo NUMERIC(10,2) DEFAULT 0,
-  costo_envio NUMERIC(10,2) DEFAULT 0,
+  redes_principales JSON,
+  floating_shapes JSON,
+  tipo_envio VARCHAR(50) DEFAULT 'delivery',
+  moneda_simbolo VARCHAR(10) DEFAULT '$',
+  pedido_minimo DECIMAL(10,2) DEFAULT 0,
+  costo_envio DECIMAL(10,2) DEFAULT 0,
   recepcion_pausada BOOLEAN DEFAULT false,
-  plan_tier TEXT DEFAULT 'free',
-  subscription_status TEXT,
-  mp_subscription_id TEXT,
-  mp_customer_id TEXT,
-  mp_status TEXT,
-  stripe_customer_id TEXT,
-  stripe_subscription_id TEXT,
-  current_period_ends_at TIMESTAMPTZ,
-  trial_ends_at TIMESTAMPTZ,
-  referral_source TEXT,
+  plan_tier VARCHAR(50) DEFAULT 'free',
+  subscription_status VARCHAR(50),
+  mp_subscription_id VARCHAR(255),
+  mp_customer_id VARCHAR(255),
+  mp_status VARCHAR(50),
+  stripe_customer_id VARCHAR(255),
+  stripe_subscription_id VARCHAR(255),
+  current_period_ends_at TIMESTAMP NULL,
+  trial_ends_at TIMESTAMP NULL,
+  referral_source VARCHAR(255),
   deletion_reason TEXT,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_negocios_user_id ON negocios(user_id);
-CREATE INDEX IF NOT EXISTS idx_negocios_slug ON negocios(slug);
-CREATE INDEX IF NOT EXISTS idx_negocios_mp_subscription ON negocios(mp_subscription_id);
-CREATE INDEX IF NOT EXISTS idx_negocios_mp_customer ON negocios(mp_customer_id);
+CREATE INDEX idx_negocios_user_id ON negocios(user_id);
+CREATE INDEX idx_negocios_slug ON negocios(slug);
+CREATE INDEX idx_negocios_mp_subscription ON negocios(mp_subscription_id);
+CREATE INDEX idx_negocios_mp_customer ON negocios(mp_customer_id);
 
--- Categorías
+-- Categorias
 CREATE TABLE IF NOT EXISTS categorias (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  negocio_id UUID REFERENCES negocios(id) ON DELETE CASCADE,
-  nombre TEXT NOT NULL,
-  slug TEXT NOT NULL,
-  icono TEXT
-);
+  id CHAR(36) PRIMARY KEY,
+  negocio_id CHAR(36) NOT NULL,
+  nombre VARCHAR(255) NOT NULL,
+  slug VARCHAR(255) NOT NULL,
+  icono VARCHAR(255),
+  FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_categorias_negocio_slug (negocio_id, slug)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_categorias_negocio ON categorias(negocio_id);
-ALTER TABLE categorias ADD CONSTRAINT fk_categorias_negocio FOREIGN KEY (negocio_id) REFERENCES negocios(id);
+CREATE INDEX idx_categorias_negocio ON categorias(negocio_id);
 
 -- Productos
 CREATE TABLE IF NOT EXISTS productos (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  negocio_id UUID NOT NULL REFERENCES negocios(id) ON DELETE CASCADE,
-  categoria_id UUID REFERENCES categorias(id) ON DELETE SET NULL,
-  nombre TEXT NOT NULL,
+  id CHAR(36) PRIMARY KEY,
+  negocio_id CHAR(36) NOT NULL,
+  categoria_id CHAR(36),
+  nombre VARCHAR(255) NOT NULL,
   descripcion TEXT,
-  precio NUMERIC(10,2) DEFAULT 0,
+  precio DECIMAL(10,2) DEFAULT 0,
   imagen_url TEXT,
   disponible BOOLEAN DEFAULT true,
-  stock INTEGER DEFAULT 0,
-  stock_minimo INTEGER DEFAULT 5,
-  configuracion JSONB,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
+  stock INT DEFAULT 0,
+  stock_minimo INT DEFAULT 5,
+  configuracion JSON,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+  FOREIGN KEY (categoria_id) REFERENCES categorias(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_productos_negocio ON productos(negocio_id);
-CREATE INDEX IF NOT EXISTS idx_productos_categoria ON productos(categoria_id);
-ALTER TABLE productos ADD CONSTRAINT fk_productos_negocio FOREIGN KEY (negocio_id) REFERENCES negocios(id);
+CREATE INDEX idx_productos_negocio ON productos(negocio_id);
+CREATE INDEX idx_productos_categoria ON productos(categoria_id);
 
 -- Clientes
 CREATE TABLE IF NOT EXISTS clientes (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  negocio_id UUID NOT NULL REFERENCES negocios(id) ON DELETE CASCADE,
-  nombre TEXT NOT NULL,
-  telefono TEXT,
-  email TEXT,
+  id CHAR(36) PRIMARY KEY,
+  negocio_id CHAR(36) NOT NULL,
+  nombre VARCHAR(255) NOT NULL,
+  telefono VARCHAR(50),
+  email VARCHAR(255),
   direccion TEXT,
   notas TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_clientes_negocio_telefono (negocio_id, telefono)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_clientes_negocio ON clientes(negocio_id);
-ALTER TABLE clientes ADD CONSTRAINT fk_clientes_negocio FOREIGN KEY (negocio_id) REFERENCES negocios(id);
+CREATE INDEX idx_clientes_negocio ON clientes(negocio_id);
 
 -- Pedidos
 CREATE TABLE IF NOT EXISTS pedidos (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  negocio_id UUID NOT NULL REFERENCES negocios(id) ON DELETE CASCADE,
-  cliente_id UUID REFERENCES clientes(id) ON DELETE SET NULL,
-  cliente_nombre TEXT,
-  cliente_whatsapp TEXT,
-  estado estado_pedido DEFAULT 'pendiente',
-  total NUMERIC(10,2) DEFAULT 0,
+  id CHAR(36) PRIMARY KEY,
+  negocio_id CHAR(36) NOT NULL,
+  cliente_id CHAR(36),
+  cliente_nombre VARCHAR(255),
+  cliente_whatsapp VARCHAR(50),
+  estado ENUM('pendiente', 'en_preparacion', 'entregado', 'cancelado') DEFAULT 'pendiente',
+  total DECIMAL(10,2) DEFAULT 0,
   es_delivery BOOLEAN DEFAULT false,
   direccion_entrega TEXT,
-  metodo_pago TEXT,
+  metodo_pago VARCHAR(50),
   notas TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+  FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_pedidos_negocio ON pedidos(negocio_id);
-CREATE INDEX IF NOT EXISTS idx_pedidos_created ON pedidos(negocio_id, created_at DESC);
-ALTER TABLE pedidos ADD CONSTRAINT fk_pedidos_negocio FOREIGN KEY (negocio_id) REFERENCES negocios(id);
+CREATE INDEX idx_pedidos_negocio ON pedidos(negocio_id);
+CREATE INDEX idx_pedidos_created ON pedidos(negocio_id, created_at DESC);
 
 -- Pedido Items
 CREATE TABLE IF NOT EXISTS pedido_items (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  pedido_id UUID REFERENCES pedidos(id) ON DELETE CASCADE,
-  producto_id UUID REFERENCES productos(id) ON DELETE SET NULL,
-  nombre_producto TEXT NOT NULL,
-  cantidad INTEGER NOT NULL,
-  precio_unitario NUMERIC(10,2) NOT NULL,
-  detalles TEXT
-);
+  id CHAR(36) PRIMARY KEY,
+  pedido_id CHAR(36) NOT NULL,
+  producto_id CHAR(36),
+  nombre_producto VARCHAR(255) NOT NULL,
+  cantidad INT NOT NULL,
+  precio_unitario DECIMAL(10,2) NOT NULL,
+  detalles TEXT,
+  FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE,
+  FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_pedido_items_pedido ON pedido_items(pedido_id);
-ALTER TABLE pedido_items ADD CONSTRAINT fk_pedido_items_pedido FOREIGN KEY (pedido_id) REFERENCES pedidos(id);
+CREATE INDEX idx_pedido_items_pedido ON pedido_items(pedido_id);
 
 -- Promos
 CREATE TABLE IF NOT EXISTS promos (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  negocio_id UUID NOT NULL REFERENCES negocios(id) ON DELETE CASCADE,
-  nombre TEXT NOT NULL,
+  id CHAR(36) PRIMARY KEY,
+  negocio_id CHAR(36) NOT NULL,
+  nombre VARCHAR(255) NOT NULL,
   descripcion TEXT,
   imagen_url TEXT,
-  tipo_descuento TEXT NOT NULL,
-  valor_descuento NUMERIC(10,2) NOT NULL,
-  codigo TEXT,
+  tipo_descuento VARCHAR(50) NOT NULL,
+  valor_descuento DECIMAL(10,2) NOT NULL,
+  codigo VARCHAR(100),
   activo BOOLEAN DEFAULT true,
-  items_combo JSONB DEFAULT '[]'::jsonb,
-  aplicar_a JSONB,
-  fecha_inicio TIMESTAMPTZ,
-  fecha_fin TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
+  items_combo JSON DEFAULT (JSON_ARRAY()),
+  aplicar_a JSON,
+  fecha_inicio TIMESTAMP NULL,
+  fecha_fin TIMESTAMP NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_promos_negocio ON promos(negocio_id);
-CREATE INDEX IF NOT EXISTS idx_promos_fecha_fin ON promos(fecha_fin) WHERE fecha_fin IS NOT NULL;
+CREATE INDEX idx_promos_negocio ON promos(negocio_id);
 
 -- Team Members
 CREATE TABLE IF NOT EXISTS team_members (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  negocio_id UUID NOT NULL REFERENCES negocios(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  role team_role DEFAULT 'staff',
-  invited_by UUID REFERENCES users(id),
-  accepted_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
+  id CHAR(36) PRIMARY KEY,
+  negocio_id CHAR(36) NOT NULL,
+  user_id CHAR(36) NOT NULL,
+  role ENUM('admin', 'staff', 'viewer') DEFAULT 'staff',
+  invited_by CHAR(36),
+  accepted_at TIMESTAMP NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (invited_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_team_members_user ON team_members(user_id);
-CREATE INDEX IF NOT EXISTS idx_team_members_negocio ON team_members(negocio_id);
+CREATE INDEX idx_team_members_user ON team_members(user_id);
+CREATE INDEX idx_team_members_negocio ON team_members(negocio_id);
 
 -- Notifications
 CREATE TABLE IF NOT EXISTS notifications (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  negocio_id UUID NOT NULL REFERENCES negocios(id) ON DELETE CASCADE,
-  type TEXT NOT NULL,
-  title TEXT NOT NULL,
+  id CHAR(36) PRIMARY KEY,
+  negocio_id CHAR(36) NOT NULL,
+  type VARCHAR(100) NOT NULL,
+  title VARCHAR(255) NOT NULL,
   body TEXT,
-  data JSONB DEFAULT '{}'::jsonb,
-  read BOOLEAN DEFAULT false,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
+  data JSON DEFAULT (JSON_OBJECT()),
+  is_read BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_notifications_negocio ON notifications(negocio_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(negocio_id, read) WHERE read = false;
+CREATE INDEX idx_notifications_negocio ON notifications(negocio_id, created_at DESC);
+CREATE INDEX idx_notifications_unread ON notifications(negocio_id, is_read);
 
 -- Notification Preferences
 CREATE TABLE IF NOT EXISTS notification_preferences (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  negocio_id UUID NOT NULL REFERENCES negocios(id) ON DELETE CASCADE,
-  notification_type TEXT NOT NULL,
+  id CHAR(36) PRIMARY KEY,
+  negocio_id CHAR(36) NOT NULL,
+  notification_type VARCHAR(100) NOT NULL,
   enabled BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  CONSTRAINT uq_notification_pref UNIQUE (negocio_id, notification_type)
-);
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_notification_pref (negocio_id, notification_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Audit Logs
 CREATE TABLE IF NOT EXISTS audit_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  negocio_id UUID NOT NULL REFERENCES negocios(id) ON DELETE CASCADE,
-  user_id TEXT NOT NULL,
-  accion TEXT NOT NULL,
-  entidad TEXT NOT NULL,
-  entidad_id TEXT,
-  cambios_previos JSONB,
-  cambios_nuevos JSONB,
-  ip_address TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
+  id CHAR(36) PRIMARY KEY,
+  negocio_id CHAR(36) NOT NULL,
+  user_id VARCHAR(255) NOT NULL,
+  accion VARCHAR(255) NOT NULL,
+  entidad VARCHAR(255) NOT NULL,
+  entidad_id VARCHAR(255),
+  cambios_previos JSON,
+  cambios_nuevos JSON,
+  ip_address VARCHAR(50),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_audit_logs_negocio ON audit_logs(negocio_id, created_at DESC);
+CREATE INDEX idx_audit_logs_negocio ON audit_logs(negocio_id, created_at DESC);
 
 -- Rate Limits
 CREATE TABLE IF NOT EXISTS rate_limits (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  key TEXT NOT NULL,
-  count INTEGER DEFAULT 1,
-  expires_at TIMESTAMPTZ NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
+  id CHAR(36) PRIMARY KEY,
+  `key` VARCHAR(255) NOT NULL,
+  `count` INT DEFAULT 1,
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_rate_limits_key ON rate_limits(key);
+CREATE INDEX idx_rate_limits_key ON rate_limits(`key`);
 
 -- ═══════════════════════════════════════════════════════════
--- FUNCTIONS
+-- STORED PROCEDURES
 -- ═══════════════════════════════════════════════════════════
+
+DELIMITER //
 
 -- Cleanup expired rate limits
-CREATE OR REPLACE FUNCTION cleanup_rate_limits()
-RETURNS void AS $$
+CREATE PROCEDURE IF NOT EXISTS cleanup_rate_limits()
 BEGIN
-  DELETE FROM rate_limits WHERE expires_at < now();
-END;
-$$ LANGUAGE plpgsql;
+  DELETE FROM rate_limits WHERE expires_at < NOW();
+END //
 
--- Submit order atomically (replaces Supabase RPC)
-CREATE OR REPLACE FUNCTION submit_order_atomic(
-  p_negocio_id UUID,
-  p_cliente_nombre TEXT,
-  p_cliente_whatsapp TEXT,
-  p_es_delivery BOOLEAN,
-  p_direccion_entrega TEXT,
-  p_metodo_pago TEXT,
-  p_notas TEXT,
-  p_items JSONB
+-- Submit order atomically
+CREATE PROCEDURE IF NOT EXISTS submit_order_atomic(
+  IN p_negocio_id CHAR(36),
+  IN p_cliente_nombre VARCHAR(255),
+  IN p_cliente_whatsapp VARCHAR(50),
+  IN p_es_delivery BOOLEAN,
+  IN p_direccion_entrega TEXT,
+  IN p_metodo_pago VARCHAR(50),
+  IN p_notas TEXT,
+  IN p_items JSON
 )
-RETURNS UUID AS $$
-DECLARE
-  v_pedido_id UUID;
-  v_item JSONB;
-  v_producto RECORD;
-  v_total NUMERIC(10,2) := 0;
-  v_cliente_id UUID;
-  v_cantidad INTEGER;
 BEGIN
+  DECLARE v_pedido_id CHAR(36);
+  DECLARE v_cliente_id CHAR(36);
+  DECLARE v_total DECIMAL(10,2) DEFAULT 0;
+  DECLARE v_item_idx INT DEFAULT 0;
+  DECLARE v_item_count INT;
+  DECLARE v_producto_id CHAR(36);
+  DECLARE v_cantidad INT;
+  DECLARE v_producto_nombre VARCHAR(255);
+  DECLARE v_producto_precio DECIMAL(10,2);
+  DECLARE v_producto_stock INT;
+  DECLARE v_detalles TEXT;
+
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+  BEGIN
+    RESIGNAL;
+  END;
+
+  START TRANSACTION;
+
   -- Validate business exists and accepts orders
   IF NOT EXISTS (
     SELECT 1 FROM negocios
     WHERE id = p_negocio_id AND (recepcion_pausada IS NULL OR recepcion_pausada = false)
   ) THEN
-    RAISE EXCEPTION 'El negocio no está aceptando pedidos';
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'El negocio no esta aceptando pedidos';
   END IF;
 
   -- Upsert client
-  INSERT INTO clientes (negocio_id, nombre, telefono)
-  VALUES (p_negocio_id, p_cliente_nombre, p_cliente_whatsapp)
-  ON CONFLICT (negocio_id, telefono)
-  DO UPDATE SET nombre = EXCLUDED.nombre
-  RETURNING id INTO v_cliente_id;
+  INSERT INTO clientes (id, negocio_id, nombre, telefono)
+  VALUES (UUID(), p_negocio_id, p_cliente_nombre, p_cliente_whatsapp)
+  ON DUPLICATE KEY UPDATE nombre = VALUES(nombre);
+  
+  SELECT id INTO v_cliente_id FROM clientes
+  WHERE negocio_id = p_negocio_id AND telefono = p_cliente_whatsapp LIMIT 1;
 
   -- Create order
-  INSERT INTO pedidos (negocio_id, cliente_id, cliente_nombre, cliente_whatsapp, es_delivery, direccion_entrega, metodo_pago, notas)
-  VALUES (p_negocio_id, v_cliente_id, p_cliente_nombre, p_cliente_whatsapp, p_es_delivery, p_direccion_entrega, p_metodo_pago, p_notas)
-  RETURNING id INTO v_pedido_id;
+  SET v_pedido_id = UUID();
+  INSERT INTO pedidos (id, negocio_id, cliente_id, cliente_nombre, cliente_whatsapp, es_delivery, direccion_entrega, metodo_pago, notas)
+  VALUES (v_pedido_id, p_negocio_id, v_cliente_id, p_cliente_nombre, p_cliente_whatsapp, p_es_delivery, p_direccion_entrega, p_metodo_pago, p_notas);
 
-  -- Process items with row-level locking to prevent overselling
-  FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
-  LOOP
-    v_cantidad := (v_item->>'cantidad')::INTEGER;
+  -- Process items
+  SET v_item_count = JSON_LENGTH(p_items);
 
-    -- Lock product row and verify availability
-    SELECT id, nombre, precio, stock INTO v_producto
+  WHILE v_item_idx < v_item_count DO
+    SET v_producto_id = JSON_UNQUOTE(JSON_EXTRACT(p_items, CONCAT('$[', v_item_idx, '].producto_id')));
+    SET v_cantidad = CAST(JSON_UNQUOTE(JSON_EXTRACT(p_items, CONCAT('$[', v_item_idx, '].cantidad'))) AS UNSIGNED);
+    SET v_detalles = JSON_UNQUOTE(JSON_EXTRACT(p_items, CONCAT('$[', v_item_idx, '].detalles')));
+
+    -- Get product info
+    SELECT nombre, precio, stock INTO v_producto_nombre, v_producto_precio, v_producto_stock
     FROM productos
-    WHERE id = (v_item->>'producto_id')::UUID
-      AND negocio_id = p_negocio_id
-      AND disponible = true
-    FOR UPDATE;
+    WHERE id = v_producto_id AND negocio_id = p_negocio_id AND disponible = true;
 
-    IF v_producto IS NULL THEN
-      RAISE EXCEPTION 'Producto no encontrado o no disponible: %', v_item->>'producto_id';
+    IF v_producto_nombre IS NULL THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Producto no encontrado o no disponible';
     END IF;
 
-    -- Check stock (stock = 0 means unlimited, stock > 0 means limited)
-    IF v_producto.stock > 0 AND v_producto.stock < v_cantidad THEN
-      RAISE EXCEPTION 'Stock insuficiente para: % (disponible: %)', v_producto.nombre, v_producto.stock;
+    -- Check stock (stock = 0 means unlimited)
+    IF v_producto_stock > 0 AND v_producto_stock < v_cantidad THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Stock insuficiente';
     END IF;
 
-    -- Decrement stock (skip if stock = 0, which means unlimited)
-    IF v_producto.stock > 0 THEN
-      UPDATE productos SET stock = stock - v_cantidad WHERE id = v_producto.id;
+    -- Decrement stock (skip if stock = 0)
+    IF v_producto_stock > 0 THEN
+      UPDATE productos SET stock = stock - v_cantidad WHERE id = v_producto_id;
     END IF;
 
-    -- Calculate total including extras from detalles JSON
-    v_total := v_total + (v_producto.precio * v_cantidad);
+    -- Calculate total
+    SET v_total = v_total + (v_producto_precio * v_cantidad);
 
-    INSERT INTO pedido_items (pedido_id, producto_id, nombre_producto, cantidad, precio_unitario, detalles)
-    VALUES (
-      v_pedido_id,
-      v_producto.id,
-      v_producto.nombre,
-      v_cantidad,
-      v_producto.precio,
-      v_item->>'detalles'
-    );
-  END LOOP;
+    INSERT INTO pedido_items (id, pedido_id, producto_id, nombre_producto, cantidad, precio_unitario, detalles)
+    VALUES (UUID(), v_pedido_id, v_producto_id, v_producto_nombre, v_cantidad, v_producto_precio, v_detalles);
+
+    SET v_item_idx = v_item_idx + 1;
+  END WHILE;
 
   -- Update order total
   UPDATE pedidos SET total = v_total WHERE id = v_pedido_id;
 
-  RETURN v_pedido_id;
-END;
-$$ LANGUAGE plpgsql;
+  COMMIT;
+
+  SELECT v_pedido_id AS pedido_id;
+END //
 
 -- Delete business completely
-CREATE OR REPLACE FUNCTION eliminar_negocio_completo(p_negocio_id UUID)
-RETURNS JSONB AS $$
+CREATE PROCEDURE IF NOT EXISTS eliminar_negocio_completo(IN p_negocio_id CHAR(36))
 BEGIN
-  -- Delete in cascade order
   DELETE FROM pedido_items WHERE pedido_id IN (SELECT id FROM pedidos WHERE negocio_id = p_negocio_id);
   DELETE FROM pedidos WHERE negocio_id = p_negocio_id;
   DELETE FROM clientes WHERE negocio_id = p_negocio_id;
@@ -381,30 +384,7 @@ BEGIN
   DELETE FROM team_members WHERE negocio_id = p_negocio_id;
   DELETE FROM negocios WHERE id = p_negocio_id;
 
-  RETURN '{"success": true}'::jsonb;
-END;
-$$ LANGUAGE plpgsql;
+  SELECT JSON_OBJECT('success', true) AS result;
+END //
 
--- ═══════════════════════════════════════════════════════════
--- VIEWS
--- ═══════════════════════════════════════════════════════════
-
-CREATE OR REPLACE VIEW view_resumen_clientes AS
-SELECT
-  p.negocio_id,
-  p.cliente_nombre,
-  COUNT(*) AS total_pedidos,
-  SUM(p.total) AS total_gasto
-FROM pedidos p
-WHERE p.estado != 'cancelado'
-GROUP BY p.negocio_id, p.cliente_nombre;
-
--- ═══════════════════════════════════════════════════════════
--- ADDITIONAL CONSTRAINTS
--- ═══════════════════════════════════════════════════════════
-
--- Unique constraint for clientes (negocio_id, telefono) for upsert
-DO $$ BEGIN
-  ALTER TABLE clientes ADD CONSTRAINT uq_clientes_negocio_telefono UNIQUE (negocio_id, telefono);
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
+DELIMITER ;

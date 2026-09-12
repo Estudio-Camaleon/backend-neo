@@ -9,11 +9,6 @@ declare global {
   }
 }
 
-/**
- * Resolves the authenticated user's negocio (tenant).
- * Supports explicit negocio_id query param for users who are owners of one
- * negocio AND team_members of another. Falls back to the first owned negocio.
- */
 export async function resolveTenant(
   req: Request,
   res: Response,
@@ -27,9 +22,8 @@ export async function resolveTenant(
     const requestedNegocioId = req.query.negocio_id as string | undefined;
 
     if (requestedNegocioId) {
-      // Validate the user has access to this specific negocio
       const ownerCheck = await query(
-        "SELECT id FROM negocios WHERE id = $1 AND user_id = $2",
+        "SELECT id FROM negocios WHERE id = ? AND user_id = ?",
         [requestedNegocioId, req.user.userId]
       );
       if (ownerCheck.rows[0]) {
@@ -38,7 +32,7 @@ export async function resolveTenant(
       }
 
       const memberCheck = await query(
-        "SELECT negocio_id FROM team_members WHERE user_id = $1 AND negocio_id = $2",
+        "SELECT negocio_id FROM team_members WHERE user_id = ? AND negocio_id = ?",
         [req.user.userId, requestedNegocioId]
       );
       if (memberCheck.rows[0]) {
@@ -49,9 +43,8 @@ export async function resolveTenant(
       return res.status(403).json({ error: "No tienes acceso a este negocio" });
     }
 
-    // Default: resolve to owned negocio first (most common case)
     const ownerResult = await query(
-      "SELECT id FROM negocios WHERE user_id = $1 ORDER BY created_at ASC LIMIT 1",
+      "SELECT id FROM negocios WHERE user_id = ? ORDER BY created_at ASC LIMIT 1",
       [req.user.userId]
     );
 
@@ -60,9 +53,8 @@ export async function resolveTenant(
       return next();
     }
 
-    // Fallback: first team membership (with deterministic ordering)
     const memberResult = await query(
-      "SELECT negocio_id FROM team_members WHERE user_id = $1 ORDER BY created_at ASC LIMIT 1",
+      "SELECT negocio_id FROM team_members WHERE user_id = ? ORDER BY created_at ASC LIMIT 1",
       [req.user.userId]
     );
 

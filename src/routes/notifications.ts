@@ -9,7 +9,7 @@ router.use(requireAuth, resolveTenant);
 router.get("/", async (req: Request, res: Response) => {
   try {
     const { rows } = await query(
-      "SELECT * FROM notifications WHERE negocio_id = $1 ORDER BY created_at DESC LIMIT 50",
+      "SELECT * FROM notifications WHERE negocio_id = ? ORDER BY created_at DESC LIMIT 50",
       [req.negocioId]
     );
     return res.json(rows);
@@ -21,7 +21,7 @@ router.get("/", async (req: Request, res: Response) => {
 router.get("/unread-count", async (req: Request, res: Response) => {
   try {
     const { rows } = await query(
-      "SELECT COUNT(*) as count FROM notifications WHERE negocio_id = $1 AND read = false",
+      "SELECT COUNT(*) as count FROM notifications WHERE negocio_id = ? AND is_read = false",
       [req.negocioId]
     );
     return res.json({ count: parseInt(rows[0].count) });
@@ -33,7 +33,7 @@ router.get("/unread-count", async (req: Request, res: Response) => {
 router.patch("/:id/read", async (req: Request, res: Response) => {
   try {
     await query(
-      "UPDATE notifications SET read = true WHERE id = $1 AND negocio_id = $2",
+      "UPDATE notifications SET is_read = true WHERE id = ? AND negocio_id = ?",
       [req.params.id, req.negocioId]
     );
     return res.json({ success: true });
@@ -45,7 +45,7 @@ router.patch("/:id/read", async (req: Request, res: Response) => {
 router.patch("/read-all", async (req: Request, res: Response) => {
   try {
     await query(
-      "UPDATE notifications SET read = true WHERE negocio_id = $1 AND read = false",
+      "UPDATE notifications SET is_read = true WHERE negocio_id = ? AND is_read = false",
       [req.negocioId]
     );
     return res.json({ success: true });
@@ -54,11 +54,10 @@ router.patch("/read-all", async (req: Request, res: Response) => {
   }
 });
 
-// Preferences
 router.get("/preferences", async (req: Request, res: Response) => {
   try {
     const { rows } = await query(
-      "SELECT * FROM notification_preferences WHERE negocio_id = $1",
+      "SELECT * FROM notification_preferences WHERE negocio_id = ?",
       [req.negocioId]
     );
     return res.json(rows);
@@ -75,8 +74,8 @@ router.put("/preferences", async (req: Request, res: Response) => {
     }
     await query(
       `INSERT INTO notification_preferences (negocio_id, notification_type, enabled)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (negocio_id, notification_type) DO UPDATE SET enabled = $3`,
+       VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)`,
       [req.negocioId, notification_type, enabled]
     );
     return res.json({ success: true });

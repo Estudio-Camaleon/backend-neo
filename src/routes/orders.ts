@@ -18,15 +18,17 @@ adminRouter.get("/recent", async (req: Request, res: Response) => {
   try {
     const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
     const { rows } = await query(
-      `SELECT p.*, 
-        json_agg(json_build_object(
-          'id', pi.id, 'producto_id', pi.producto_id, 'nombre_producto', pi.nombre_producto,
-          'cantidad', pi.cantidad, 'precio_unitario', pi.precio_unitario, 'detalles', pi.detalles
-        )) FILTER (WHERE pi.id IS NOT NULL) as pedido_items
+      `SELECT p.*,
+        IFNULL(
+          (SELECT JSON_ARRAYAGG(JSON_OBJECT(
+            'id', pi.id, 'producto_id', pi.producto_id, 'nombre_producto', pi.nombre_producto,
+            'cantidad', pi.cantidad, 'precio_unitario', pi.precio_unitario, 'detalles', pi.detalles
+          )) FROM pedido_items pi WHERE pi.pedido_id = p.id),
+          '[]'
+        ) as pedido_items
        FROM pedidos p
-       LEFT JOIN pedido_items pi ON pi.pedido_id = p.id
-       WHERE p.negocio_id = $1
-       GROUP BY p.id ORDER BY p.created_at DESC LIMIT $2`,
+       WHERE p.negocio_id = ?
+       ORDER BY p.created_at DESC LIMIT ?`,
       [req.negocioId, limit]
     );
     return res.json(rows);
@@ -54,32 +56,33 @@ adminRouter.get("/", async (req: Request, res: Response) => {
     }
 
     let sql = `
-      SELECT p.*, 
-        json_agg(json_build_object(
-          'id', pi.id, 'producto_id', pi.producto_id, 'nombre_producto', pi.nombre_producto,
-          'cantidad', pi.cantidad, 'precio_unitario', pi.precio_unitario, 'detalles', pi.detalles
-        )) FILTER (WHERE pi.id IS NOT NULL) as pedido_items
+      SELECT p.*,
+        IFNULL(
+          (SELECT JSON_ARRAYAGG(JSON_OBJECT(
+            'id', pi.id, 'producto_id', pi.producto_id, 'nombre_producto', pi.nombre_producto,
+            'cantidad', pi.cantidad, 'precio_unitario', pi.precio_unitario, 'detalles', pi.detalles
+          )) FROM pedido_items pi WHERE pi.pedido_id = p.id),
+          '[]'
+        ) as pedido_items
       FROM pedidos p
-      LEFT JOIN pedido_items pi ON pi.pedido_id = p.id
-      WHERE p.negocio_id = $1
+      WHERE p.negocio_id = ?
     `;
     const params: string[] = [req.negocioId!];
-    let paramIdx = 2;
 
     if (startDate) {
-      sql += ` AND p.created_at >= $${paramIdx++}`;
+      sql += ` AND p.created_at >= ?`;
       params.push(startDate as string);
     }
     if (endDate) {
-      sql += ` AND p.created_at <= $${paramIdx++}`;
+      sql += ` AND p.created_at <= ?`;
       params.push(endDate as string);
     }
     if (status) {
-      sql += ` AND p.estado = $${paramIdx++}`;
+      sql += ` AND p.estado = ?`;
       params.push(status as string);
     }
 
-    sql += " GROUP BY p.id ORDER BY p.created_at DESC";
+    sql += " ORDER BY p.created_at DESC";
 
     const { rows } = await query(sql, params);
     return res.json(rows);
@@ -98,16 +101,21 @@ adminRouter.patch("/:id/status", async (req: Request, res: Response) => {
     }
 
     const oldResult = await query(
-      "SELECT estado FROM pedidos WHERE id = $1 AND negocio_id = $2",
+      "SELECT estado FROM pedidos WHERE id = ? AND negocio_id = ?",
       [req.params.id, req.negocioId]
     );
 
-    const { rows, rowCount } = await query(
-      "UPDATE pedidos SET estado = $1 WHERE id = $2 AND negocio_id = $3 RETURNING *",
+    const result = await query(
+      "UPDATE pedidos SET estado = ? WHERE id = ? AND negocio_id = ?",
       [nuevoEstado, req.params.id, req.negocioId]
     );
 
-    if (!rowCount) return res.status(404).json({ error: "Pedido no encontrado" });
+    if (!result.affectedRows) return res.status(404).json({ error: "Pedido no encontrado" });
+
+    const { rows } = await query(
+      "SELECT * FROM pedidos WHERE id = ? AND negocio_id = ?",
+      [req.params.id, req.negocioId]
+    );
 
     logAuditEvent({
       negocio_id: req.negocioId!,
@@ -128,7 +136,7 @@ adminRouter.patch("/:id/status", async (req: Request, res: Response) => {
 adminRouter.patch("/toggle-reception", async (req: Request, res: Response) => {
   try {
     const { rows: current } = await query(
-      "SELECT recepcion_pausada FROM negocios WHERE id = $1",
+      "SELECT recepcion_pausada FROM negocios WHERE id = ?",
       [req.negocioId]
     );
 
@@ -137,7 +145,7 @@ adminRouter.patch("/toggle-reception", async (req: Request, res: Response) => {
     const nuevoEstado = !current[0].recepcion_pausada;
 
     await query(
-      "UPDATE negocios SET recepcion_pausada = $1, updated_at = now() WHERE id = $2",
+      "UPDATE negocios SET recepcion_pausada = ?, updated_at = NOW() WHERE id = ?",
       [nuevoEstado, req.negocioId]
     );
 
@@ -167,7 +175,7 @@ publicRouter.post("/submit", async (req: Request, res: Response) => {
 
     // Check business accepts orders
     const { rows: negocio } = await query(
-      "SELECT recepcion_pausada FROM negocios WHERE id = $1",
+      "SELECT recepcion_pausada FROM negocios WHERE id = ?",
       [negocio_id]
     );
 
@@ -179,9 +187,9 @@ publicRouter.post("/submit", async (req: Request, res: Response) => {
       return res.status(403).json({ error: "La recepción de pedidos está pausada." });
     }
 
-    // Use atomic RPC
+    // Use atomic procedure
     const { rows } = await query(
-      "SELECT submit_order_atomic($1, $2, $3, $4, $5, $6, $7, $8) as pedido_id",
+      "CALL submit_order_atomic(?, ?, ?, ?, ?, ?, ?, ?)",
       [
         negocio_id,
         cliente_nombre,

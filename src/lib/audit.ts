@@ -22,7 +22,7 @@ export async function logAuditEvent(params: {
   try {
     await query(
       `INSERT INTO audit_logs (negocio_id, user_id, accion, entidad, entidad_id, cambios_previos, cambios_nuevos, ip_address)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         params.negocio_id,
         params.user_id,

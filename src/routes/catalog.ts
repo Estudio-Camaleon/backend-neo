@@ -16,7 +16,7 @@ router.use(requireAuth, resolveTenant);
 router.get("/products", async (req: Request, res: Response) => {
   try {
     const { rows } = await query(
-      "SELECT * FROM productos WHERE negocio_id = $1 ORDER BY nombre",
+      "SELECT * FROM productos WHERE negocio_id = ? ORDER BY nombre",
       [req.negocioId]
     );
     return res.json(rows);
@@ -29,7 +29,7 @@ router.get("/products", async (req: Request, res: Response) => {
 router.get("/products/:id", async (req: Request, res: Response) => {
   try {
     const { rows } = await query(
-      "SELECT * FROM productos WHERE id = $1 AND negocio_id = $2",
+      "SELECT * FROM productos WHERE id = ? AND negocio_id = ?",
       [req.params.id, req.negocioId]
     );
     if (!rows[0]) return res.status(404).json({ error: "Producto no encontrado" });
@@ -44,7 +44,7 @@ router.get("/products/:id", async (req: Request, res: Response) => {
 router.get("/categories", async (req: Request, res: Response) => {
   try {
     const { rows } = await query(
-      "SELECT * FROM categorias WHERE negocio_id = $1 ORDER BY nombre",
+      "SELECT * FROM categorias WHERE negocio_id = ? ORDER BY nombre",
       [req.negocioId]
     );
     return res.json(rows);
@@ -64,12 +64,12 @@ router.post("/products", requireRole(["admin", "staff"]), async (req: Request, r
 
     // Check plan limits
     const countResult = await query(
-      "SELECT COUNT(*) as count FROM productos WHERE negocio_id = $1",
+      "SELECT COUNT(*) as count FROM productos WHERE negocio_id = ?",
       [req.negocioId]
     );
     const currentCount = parseInt(countResult.rows[0].count);
 
-    const tierResult = await query("SELECT plan_tier FROM negocios WHERE id = $1", [req.negocioId]);
+    const tierResult = await query("SELECT plan_tier FROM negocios WHERE id = ?", [req.negocioId]);
     const tier = tierResult.rows[0]?.plan_tier || "free";
     const maxProducts = tier === "pro" ? 9999 : 50;
 
@@ -77,10 +77,9 @@ router.post("/products", requireRole(["admin", "staff"]), async (req: Request, r
       return res.status(403).json({ error: "Alcanzaste el límite de productos de tu plan. Actualizá a PRO." });
     }
 
-    const { rows } = await query(
+    const insertResult = await query(
       `INSERT INTO productos (nombre, descripcion, precio, imagen_url, categoria_id, disponible, stock, stock_minimo, configuracion, negocio_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       RETURNING *`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         parsed.data.nombre,
         parsed.data.descripcion || null,
@@ -94,6 +93,8 @@ router.post("/products", requireRole(["admin", "staff"]), async (req: Request, r
         req.negocioId,
       ]
     );
+
+    const { rows } = await query("SELECT * FROM productos WHERE id = ?", [insertResult.insertId]);
 
     logAuditEvent({
       negocio_id: req.negocioId!,
@@ -120,17 +121,16 @@ router.put("/products/:id", requireRole(["admin", "staff"]), async (req: Request
 
     // Get old data for audit
     const oldResult = await query(
-      "SELECT nombre, precio, disponible FROM productos WHERE id = $1 AND negocio_id = $2",
+      "SELECT nombre, precio, disponible FROM productos WHERE id = ? AND negocio_id = ?",
       [req.params.id, req.negocioId]
     );
 
-    const { rows } = await query(
+    await query(
       `UPDATE productos SET
-        nombre = $1, descripcion = $2, precio = $3, imagen_url = $4,
-        categoria_id = $5, disponible = $6, stock = $7, stock_minimo = $8,
-        configuracion = $9
-       WHERE id = $10 AND negocio_id = $11
-       RETURNING *`,
+        nombre = ?, descripcion = ?, precio = ?, imagen_url = ?,
+        categoria_id = ?, disponible = ?, stock = ?, stock_minimo = ?,
+        configuracion = ?
+       WHERE id = ? AND negocio_id = ?`,
       [
         parsed.data.nombre,
         parsed.data.descripcion || null,
@@ -144,6 +144,11 @@ router.put("/products/:id", requireRole(["admin", "staff"]), async (req: Request
         req.params.id,
         req.negocioId,
       ]
+    );
+
+    const { rows } = await query(
+      "SELECT * FROM productos WHERE id = ? AND negocio_id = ?",
+      [req.params.id, req.negocioId]
     );
 
     if (!rows[0]) return res.status(404).json({ error: "Producto no encontrado" });
@@ -172,9 +177,14 @@ router.patch("/products/:id/toggle", requireRole(["admin", "staff"]), async (req
       return res.status(400).json({ error: "disponible debe ser boolean" });
     }
 
-    const { rows } = await query(
-      "UPDATE productos SET disponible = $1 WHERE id = $2 AND negocio_id = $3 RETURNING *",
+    await query(
+      "UPDATE productos SET disponible = ? WHERE id = ? AND negocio_id = ?",
       [disponible, req.params.id, req.negocioId]
+    );
+
+    const { rows } = await query(
+      "SELECT * FROM productos WHERE id = ? AND negocio_id = ?",
+      [req.params.id, req.negocioId]
     );
 
     if (!rows[0]) return res.status(404).json({ error: "Producto no encontrado" });
@@ -187,16 +197,16 @@ router.patch("/products/:id/toggle", requireRole(["admin", "staff"]), async (req
 router.delete("/products/:id", requireRole(["admin", "staff"]), async (req: Request, res: Response) => {
   try {
     const oldResult = await query(
-      "SELECT nombre FROM productos WHERE id = $1 AND negocio_id = $2",
+      "SELECT nombre FROM productos WHERE id = ? AND negocio_id = ?",
       [req.params.id, req.negocioId]
     );
 
-    const { rowCount } = await query(
-      "DELETE FROM productos WHERE id = $1 AND negocio_id = $2",
+    const { affectedRows } = await query(
+      "DELETE FROM productos WHERE id = ? AND negocio_id = ?",
       [req.params.id, req.negocioId]
     );
 
-    if (!rowCount) return res.status(404).json({ error: "Producto no encontrado" });
+    if (!affectedRows) return res.status(404).json({ error: "Producto no encontrado" });
 
     logAuditEvent({
       negocio_id: req.negocioId!,
@@ -222,12 +232,12 @@ router.post("/categories", requireRole(["admin", "staff"]), async (req: Request,
 
     // Check plan limits
     const countResult = await query(
-      "SELECT COUNT(*) as count FROM categorias WHERE negocio_id = $1",
+      "SELECT COUNT(*) as count FROM categorias WHERE negocio_id = ?",
       [req.negocioId]
     );
     const currentCount = parseInt(countResult.rows[0].count);
 
-    const tierResult = await query("SELECT plan_tier FROM negocios WHERE id = $1", [req.negocioId]);
+    const tierResult = await query("SELECT plan_tier FROM negocios WHERE id = ?", [req.negocioId]);
     const tier = tierResult.rows[0]?.plan_tier || "free";
     const maxCategories = tier === "pro" ? 999 : 15;
 
@@ -237,17 +247,19 @@ router.post("/categories", requireRole(["admin", "staff"]), async (req: Request,
 
     // Check duplicate slug within tenant
     const slugCheck = await query(
-      "SELECT id FROM categorias WHERE slug = $1 AND negocio_id = $2",
+      "SELECT id FROM categorias WHERE slug = ? AND negocio_id = ?",
       [slug, req.negocioId]
     );
     if (slugCheck.rows[0]) {
       return res.status(409).json({ error: "Ya existe una sección con ese identificador." });
     }
 
-    const { rows } = await query(
-      "INSERT INTO categorias (nombre, slug, negocio_id) VALUES ($1, $2, $3) RETURNING *",
+    const insertResult = await query(
+      "INSERT INTO categorias (nombre, slug, negocio_id) VALUES (?, ?, ?)",
       [nombre, slug, req.negocioId]
     );
+
+    const { rows } = await query("SELECT * FROM categorias WHERE id = ?", [insertResult.insertId]);
 
     logAuditEvent({
       negocio_id: req.negocioId!,
@@ -268,16 +280,16 @@ router.post("/categories", requireRole(["admin", "staff"]), async (req: Request,
 router.delete("/categories/:id", requireRole(["admin", "staff"]), async (req: Request, res: Response) => {
   try {
     const oldResult = await query(
-      "SELECT nombre FROM categorias WHERE id = $1 AND negocio_id = $2",
+      "SELECT nombre FROM categorias WHERE id = ? AND negocio_id = ?",
       [req.params.id, req.negocioId]
     );
 
-    const { rowCount } = await query(
-      "DELETE FROM categorias WHERE id = $1 AND negocio_id = $2",
+    const { affectedRows } = await query(
+      "DELETE FROM categorias WHERE id = ? AND negocio_id = ?",
       [req.params.id, req.negocioId]
     );
 
-    if (!rowCount) return res.status(404).json({ error: "Categoría no encontrada" });
+    if (!affectedRows) return res.status(404).json({ error: "Categoría no encontrada" });
 
     logAuditEvent({
       negocio_id: req.negocioId!,

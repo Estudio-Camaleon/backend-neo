@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import bcrypt from "bcrypt";
+import { v4 as uuidv4 } from "uuid";
 import { query } from "../lib/db";
 import { generateToken, verifyToken } from "../middleware/auth";
 import { loginSchema, registerSchema } from "../lib/schemas";
@@ -26,7 +27,7 @@ router.post("/login", async (req: Request, res: Response) => {
     const { email, password } = parsed.data;
 
     const { rows } = await query(
-      "SELECT id, email, password_hash, first_name, last_name FROM users WHERE email = $1",
+      "SELECT id, email, password_hash, first_name, last_name FROM users WHERE email = ?",
       [email]
     );
 
@@ -41,7 +42,7 @@ router.post("/login", async (req: Request, res: Response) => {
     }
 
     // Update last login
-    await query("UPDATE users SET updated_at = now() WHERE id = $1", [user.id]);
+    await query("UPDATE users SET updated_at = NOW() WHERE id = ?", [user.id]);
 
     const token = generateToken({ userId: user.id, email: user.email });
 
@@ -75,25 +76,25 @@ router.post("/register", async (req: Request, res: Response) => {
     const { email, password, firstName, lastName, phone, referralSource, nombreNegocio, slug, whatsapp } = parsed.data;
 
     // Check duplicate email
-    const emailCheck = await query("SELECT id FROM users WHERE email = $1", [email]);
+    const emailCheck = await query("SELECT id FROM users WHERE email = ?", [email]);
     if (emailCheck.rows[0]) {
       return res.status(409).json({ error: "El correo electrónico ya está registrado." });
     }
 
     // Check duplicate slug
-    const slugCheck = await query("SELECT id FROM negocios WHERE slug = $1", [slug]);
+    const slugCheck = await query("SELECT id FROM negocios WHERE slug = ?", [slug]);
     if (slugCheck.rows[0]) {
       return res.status(409).json({ error: "El slug ya está en uso. Elegí otro." });
     }
 
     // Check duplicate business name
-    const nameCheck = await query("SELECT id FROM negocios WHERE nombre = $1", [nombreNegocio]);
+    const nameCheck = await query("SELECT id FROM negocios WHERE nombre = ?", [nombreNegocio]);
     if (nameCheck.rows[0]) {
       return res.status(409).json({ error: "El nombre del negocio ya está registrado." });
     }
 
     // Check duplicate phone
-    const phoneCheck = await query("SELECT id FROM negocios WHERE phone = $1", [phone]);
+    const phoneCheck = await query("SELECT id FROM negocios WHERE phone = ?", [phone]);
     if (phoneCheck.rows[0]) {
       return res.status(409).json({ error: "El celular ya está registrado por otro usuario." });
     }
@@ -102,19 +103,23 @@ router.post("/register", async (req: Request, res: Response) => {
     const passwordHash = await bcrypt.hash(password, 12);
 
     // Create user
-    const userResult = await query(
-      `INSERT INTO users (email, password_hash, first_name, last_name, phone, email_confirmed)
-       VALUES ($1, $2, $3, $4, $5, true)
-       RETURNING id, email, first_name, last_name`,
-      [email, passwordHash, firstName, lastName, phone]
+    const userId = uuidv4();
+    await query(
+      `INSERT INTO users (id, email, password_hash, first_name, last_name, phone, email_confirmed)
+       VALUES (?, ?, ?, ?, ?, ?, true)`,
+      [userId, email, passwordHash, firstName, lastName, phone]
     );
 
+    const userResult = await query(
+      "SELECT id, email, first_name, last_name FROM users WHERE id = ?",
+      [userId]
+    );
     const newUser = userResult.rows[0];
 
     // Create negocio
     await query(
       `INSERT INTO negocios (user_id, nombre, slug, phone, referral_source, whatsapp)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+       VALUES (?, ?, ?, ?, ?, ?)`,
       [newUser.id, nombreNegocio, slug, phone, referralSource || null, whatsapp || null]
     );
 
@@ -151,7 +156,7 @@ router.post("/check-duplicate", async (req: Request, res: Response) => {
     if (!cleanValue) return res.json({ exists: false });
 
     if (field === "email") {
-      const { rows } = await query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [cleanValue]);
+      const { rows } = await query("SELECT id FROM users WHERE LOWER(email) = LOWER(?)", [cleanValue]);
       return res.json({ exists: rows.length > 0 });
     }
 
@@ -159,7 +164,7 @@ router.post("/check-duplicate", async (req: Request, res: Response) => {
     if (!allowed.includes(field)) return res.json({ exists: false });
 
     const { rows } = await query(
-      `SELECT id, nombre FROM negocios WHERE ${field} ILIKE $1 LIMIT 1`,
+      `SELECT id, nombre FROM negocios WHERE ${field} LIKE ? LIMIT 1`,
       [cleanValue]
     );
     return res.json({ exists: rows.length > 0 });
@@ -199,7 +204,7 @@ router.get("/me", async (req: Request, res: Response) => {
     const payload = verifyToken(token);
 
     const { rows } = await query(
-      "SELECT id, email, first_name, last_name, phone FROM users WHERE id = $1",
+      "SELECT id, email, first_name, last_name, phone FROM users WHERE id = ?",
       [payload.userId]
     );
 

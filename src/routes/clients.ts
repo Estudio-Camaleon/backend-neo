@@ -9,7 +9,7 @@ router.use(requireAuth, resolveTenant);
 router.get("/", async (req: Request, res: Response) => {
   try {
     const { rows } = await query(
-      "SELECT * FROM clientes WHERE negocio_id = $1 ORDER BY nombre",
+      "SELECT * FROM clientes WHERE negocio_id = ? ORDER BY nombre",
       [req.negocioId]
     );
     return res.json(rows);
@@ -21,11 +21,11 @@ router.get("/", async (req: Request, res: Response) => {
 router.put("/:id/notes", async (req: Request, res: Response) => {
   try {
     const { notas } = req.body;
-    const { rowCount } = await query(
-      "UPDATE clientes SET notas = $1 WHERE id = $2 AND negocio_id = $3",
+    const { affectedRows } = await query(
+      "UPDATE clientes SET notas = ? WHERE id = ? AND negocio_id = ?",
       [notas?.trim() || "", req.params.id, req.negocioId]
     );
-    if (!rowCount) return res.status(404).json({ error: "Cliente no encontrado" });
+    if (!affectedRows) return res.status(404).json({ error: "Cliente no encontrado" });
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: "Error al actualizar notas" });
@@ -34,11 +34,11 @@ router.put("/:id/notes", async (req: Request, res: Response) => {
 
 router.delete("/:id", async (req: Request, res: Response) => {
   try {
-    const { rowCount } = await query(
-      "DELETE FROM clientes WHERE id = $1 AND negocio_id = $2",
+    const { affectedRows } = await query(
+      "DELETE FROM clientes WHERE id = ? AND negocio_id = ?",
       [req.params.id, req.negocioId]
     );
-    if (!rowCount) return res.status(404).json({ error: "Cliente no encontrado" });
+    if (!affectedRows) return res.status(404).json({ error: "Cliente no encontrado" });
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: "Error al eliminar cliente" });
